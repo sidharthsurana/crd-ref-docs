@@ -36,6 +36,7 @@ type ProcessorConfig struct {
 	IgnoreGroupVersions []string `json:"ignoreGroupVersions"`
 	UseRawDocstring     bool     `json:"useRawDocstring"`
 	CustomMarkers       []Marker `json:"customMarkers"`
+	GroupSort           []string `json:"groupSort"`
 }
 
 type Marker struct {

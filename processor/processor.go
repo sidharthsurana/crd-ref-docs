@@ -111,20 +111,87 @@ func Process(config *config.Config) ([]types.GroupVersionDetails, error) {
 		gvDetails = append(gvDetails, details)
 	}
 
-	// sort the array by GV
+	// sort the array by GV using hierarchical domain sorting
 	sort.SliceStable(gvDetails, func(i, j int) bool {
-		if gvDetails[i].Group < gvDetails[j].Group {
-			return true
-		}
-
-		if gvDetails[i].Group == gvDetails[j].Group {
-			return gvDetails[i].Version < gvDetails[j].Version
-		}
-
-		return false
+		return compareGroupVersionsHierarchically(gvDetails[i].GroupVersion.Group, gvDetails[j].GroupVersion.Group, compiledConfig.groupSort)
 	})
 
 	return gvDetails, nil
+}
+
+func compareGroupVersionsHierarchically(group1, group2 string, sortPatterns []string) int {
+	groupCmp := compareGroupsHierarchically(gvDetails[i].GroupVersion.Group, gvDetails[j].GroupVersion.Group, compiledConfig.groupSort)
+	if groupCmp != 0 {
+		return groupCmp < 0
+	}
+
+	return gv1.Version < gv2.Version
+}
+
+// compareGroupsHierarchically compares two group names with domain hierarchy awareness.
+// Returns: -1 if group1 < group2, 0 if equal, 1 if group1 > group2
+// Uses configurable sort patterns for ordering.
+func compareGroupsHierarchically(group1, group2 string, sortPatterns []string) int {
+	if group1 == group2 {
+		return 0
+	}
+
+	// Handle configurable sort patterns
+	priority1 := getGroupPriority(group1, sortPatterns)
+	priority2 := getGroupPriority(group2, sortPatterns)
+
+	if priority1 != priority2 {
+		return priority1 - priority2
+	}
+
+	// Both groups have the same priority, use hierarchical comparison
+	parts1 := strings.Split(group1, ".")
+	parts2 := strings.Split(group2, ".")
+
+	len1 := len(parts1)
+	len2 := len(parts2)
+
+	// Compare common parts from most significant (rightmost) to least significant
+	for i := 1; i <= len1 && i <= len2; i++ {
+		part1 := parts1[len1-i]
+		part2 := parts2[len2-i]
+
+		if part1 < part2 {
+			return -1
+		}
+		if part1 > part2 {
+			return 1
+		}
+	}
+
+	// All common parts are equal, so length determines hierarchy
+	// Shorter domain (parent) comes before longer domain (subdomain)
+	return len1 - len2
+}
+
+// getGroupPriority returns the priority for a group based on configured sort patterns.
+// Lower numbers have higher priority (come first).
+// Groups that don't match any pattern are automatically assigned to an implicit "other" group.
+func getGroupPriority(group string, sortPatterns []string) int {
+	for i, pattern := range sortPatterns {
+		// Wildcard to allow specific groups to be sorted to the end of the list
+		if pattern == "*" {
+			return i
+		}
+
+		// Exact match
+		if pattern == group {
+			return i
+		}
+
+		// Subdomain match: "k8s.io" matches "apps.k8s.io"
+		if strings.HasSuffix(group, "."+pattern) {
+			return i
+		}
+	}
+
+	// If no pattern matches, assign to implicit "other" group at the end
+	return len(sortPatterns)
 }
 
 func newProcessor(compiledConfig *compiledConfig, maxDepth int) (*processor, error) {
