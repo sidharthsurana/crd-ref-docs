@@ -155,7 +155,19 @@ func (adr *AsciidoctorRenderer) RenderFieldDoc(text string) string {
 
 	// Trim any leading and trailing whitespace from each line.
 	lines := strings.Split(out, "\n")
+	codeBlock := false
 	for i := range lines {
+		if strings.TrimSpace(lines[i]) == "```" {
+			codeBlock = !codeBlock
+			if !codeBlock {
+				// These were the ending ``` thus no need for processing, move on to the next line
+				continue
+			}
+		}
+		if codeBlock {
+			// No processing is needed when inside the code block
+			continue
+		}
 		lines[i] = strings.TrimSpace(lines[i])
 		// Replace newlines with hard line breaks so that newlines are rendered as expected for non-empty lines.
 		// See: https://docs.asciidoctor.org/asciidoc/latest/blocks/hard-line-breaks
