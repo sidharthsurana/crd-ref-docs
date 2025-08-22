@@ -85,30 +85,32 @@ func TestHierarchicalSortingIntegration(t *testing.T) {
 		{Group: "", Version: "v1"}, // core group
 		{Group: "apps.k8s.io", Version: "v1beta1"},
 		{Group: "gateway.networking.k8s.io", Version: "v1alpha2"},
-		{Group: "x-k8s.io", Version: "v1"},                           // x-k8s.io domain
-		{Group: "metrics.x-k8s.io", Version: "v1beta1"},              // x-k8s.io subdomain
-		{Group: "example.com", Version: "v1"},                        // other domain
-		{Group: "test.example.com", Version: "v1"},                   // other subdomain
+		{Group: "x-k8s.io", Version: "v1"},              // x-k8s.io domain
+		{Group: "metrics.x-k8s.io", Version: "v1beta1"}, // x-k8s.io subdomain
+		{Group: "example.com", Version: "v1"},           // other domain
+		{Group: "test.example.com", Version: "v1"},      // other subdomain
 	}
 
 	// Sort using hierarchical comparison with no special patterns
-	sort.SliceStable(groupVersions, compareGroupVersionsFunction([]string{}))
+	sort.SliceStable(groupVersions, func(i, j int) bool {
+		return compareGroupVersionsHierarchically(groupVersions[i], groupVersions[j], []string{})
+	})
 
 	expected := []schema.GroupVersion{
-		{Group: "", Version: "v1"},                                    // core group (empty string sorts first alphabetically)
-		{Group: "example.com", Version: "v1"},                        // example.com parent domain
-		{Group: "test.example.com", Version: "v1"},                   // example.com subdomain
-		{Group: "k8s.io", Version: "v1"},                             // k8s.io parent domain
-		{Group: "apps.k8s.io", Version: "v1"},                        // k8s.io subdomain, v1 before v1beta1
-		{Group: "apps.k8s.io", Version: "v1beta1"},                   // k8s.io subdomain, v1beta1 after v1
-		{Group: "batch.k8s.io", Version: "v1"},                       // k8s.io sibling to apps
-		{Group: "events.k8s.io", Version: "v1"},                      // k8s.io sibling to apps and batch
-		{Group: "networking.k8s.io", Version: "v1"},                  // k8s.io sibling to apps, batch, events
-		{Group: "gateway.networking.k8s.io", Version: "v1alpha2"},    // k8s.io nested subdomain, v1alpha2 before v1beta1
-		{Group: "gateway.networking.k8s.io", Version: "v1beta1"},     // k8s.io nested subdomain, v1beta1 after v1alpha2
-		{Group: "storage.k8s.io", Version: "v1"},                     // k8s.io sibling to networking
-		{Group: "x-k8s.io", Version: "v1"},                           // x-k8s.io parent domain
-		{Group: "metrics.x-k8s.io", Version: "v1beta1"},              // x-k8s.io subdomain
+		{Group: "", Version: "v1"},                                // core group (empty string sorts first alphabetically)
+		{Group: "example.com", Version: "v1"},                     // example.com parent domain
+		{Group: "test.example.com", Version: "v1"},                // example.com subdomain
+		{Group: "k8s.io", Version: "v1"},                          // k8s.io parent domain
+		{Group: "apps.k8s.io", Version: "v1"},                     // k8s.io subdomain, v1 before v1beta1
+		{Group: "apps.k8s.io", Version: "v1beta1"},                // k8s.io subdomain, v1beta1 after v1
+		{Group: "batch.k8s.io", Version: "v1"},                    // k8s.io sibling to apps
+		{Group: "events.k8s.io", Version: "v1"},                   // k8s.io sibling to apps and batch
+		{Group: "networking.k8s.io", Version: "v1"},               // k8s.io sibling to apps, batch, events
+		{Group: "gateway.networking.k8s.io", Version: "v1alpha2"}, // k8s.io nested subdomain, v1alpha2 before v1beta1
+		{Group: "gateway.networking.k8s.io", Version: "v1beta1"},  // k8s.io nested subdomain, v1beta1 after v1alpha2
+		{Group: "storage.k8s.io", Version: "v1"},                  // k8s.io sibling to networking
+		{Group: "x-k8s.io", Version: "v1"},                        // x-k8s.io parent domain
+		{Group: "metrics.x-k8s.io", Version: "v1beta1"},           // x-k8s.io subdomain
 	}
 
 	assertSortOrder(t, groupVersions, expected)
@@ -119,7 +121,7 @@ func TestCustomGroupSort(t *testing.T) {
 	customSortPatterns := []string{
 		"custom.example.com", // Priority 0 (highest)
 		"",                   // Priority 1 (core APIs)
-		"k8s.io",            // Priority 2 (k8s.io and subdomains)
+		"k8s.io",             // Priority 2 (k8s.io and subdomains)
 		// Note: No explicit "other" pattern needed - unmatched groups are automatically handled
 	}
 
@@ -132,14 +134,16 @@ func TestCustomGroupSort(t *testing.T) {
 	}
 
 	// Sort using custom patterns
-	sort.SliceStable(groupVersions, compareGroupVersionsFunction(customSortPatterns))
+	sort.SliceStable(groupVersions, func(i, j int) bool {
+		return compareGroupVersionsHierarchically(groupVersions[i], groupVersions[j], customSortPatterns)
+	})
 
 	expected := []schema.GroupVersion{
 		{Group: "custom.example.com", Version: "v1"},     // custom priority 0
 		{Group: "api.custom.example.com", Version: "v1"}, // custom priority 0
 		{Group: "", Version: "v1"},                       // core priority 1
-		{Group: "apps.k8s.io", Version: "v1"},           // k8s priority 2
-		{Group: "other.example.com", Version: "v1"},     // implicit "other" priority 3
+		{Group: "apps.k8s.io", Version: "v1"},            // k8s priority 2
+		{Group: "other.example.com", Version: "v1"},      // implicit "other" priority 3
 	}
 
 	assertSortOrder(t, groupVersions, expected)
@@ -187,12 +191,12 @@ func TestMultiplePatternPriorities(t *testing.T) {
 		group    string
 		expected int
 	}{
-		{"", 0},                    // matches first pattern
-		{"k8s.io", 1},             // matches second pattern
-		{"apps.k8s.io", 1},        // subdomain of second pattern
-		{"example.com", 2},        // matches third pattern
-		{"test.example.com", 2},   // subdomain of third pattern
-		{"other.org", 3},          // no match, implicit "other"
+		{"", 0},                 // matches first pattern
+		{"k8s.io", 1},           // matches second pattern
+		{"apps.k8s.io", 1},      // subdomain of second pattern
+		{"example.com", 2},      // matches third pattern
+		{"test.example.com", 2}, // subdomain of third pattern
+		{"other.org", 3},        // no match, implicit "other"
 	}
 
 	for _, tt := range tests {

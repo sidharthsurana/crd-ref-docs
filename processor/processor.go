@@ -113,19 +113,19 @@ func Process(config *config.Config) ([]types.GroupVersionDetails, error) {
 
 	// sort the array by GV using hierarchical domain sorting
 	sort.SliceStable(gvDetails, func(i, j int) bool {
-		return compareGroupVersionsHierarchically(gvDetails[i].GroupVersion.Group, gvDetails[j].GroupVersion.Group, compiledConfig.groupSort)
+		return compareGroupVersionsHierarchically(gvDetails[i].GroupVersion, gvDetails[j].GroupVersion, compiledConfig.groupSort)
 	})
 
 	return gvDetails, nil
 }
 
-func compareGroupVersionsHierarchically(group1, group2 string, sortPatterns []string) int {
-	groupCmp := compareGroupsHierarchically(gvDetails[i].GroupVersion.Group, gvDetails[j].GroupVersion.Group, compiledConfig.groupSort)
+func compareGroupVersionsHierarchically(group1, group2 schema.GroupVersion, sortPatterns []string) bool {
+	groupCmp := compareGroupsHierarchically(group1.Group, group2.Group, sortPatterns)
 	if groupCmp != 0 {
 		return groupCmp < 0
 	}
 
-	return gv1.Version < gv2.Version
+	return group1.Version < group2.Version
 }
 
 // compareGroupsHierarchically compares two group names with domain hierarchy awareness.
