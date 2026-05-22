@@ -24,6 +24,63 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestKnownTypeTakesPrecedenceOverKubeType(t *testing.T) {
+	conf := config.Config{
+		Render: config.RenderConfig{
+			KubernetesVersion: "1.29",
+			KnownTypes: []*config.KnownType{
+				{
+					Name:    "IPFamily",
+					Package: "k8s.io/api/core/v1",
+					Link:    "https://pkg.go.dev/k8s.io/api/core/v1#IPFamily",
+				},
+				{
+					Name:    "ObjectMeta",
+					Package: "k8s.io/apimachinery/pkg/apis/meta/v1",
+					Link:    "https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta",
+				},
+			},
+		},
+	}
+
+	funcs, err := NewFunctions(&conf)
+	require.NoError(t, err)
+
+	cases := []struct {
+		name          string
+		input         *types.Type
+		expectedLink  string
+		expectedLocal bool
+	}{
+		{
+			name:          "knownType under k8s.io/api overrides auto kube link",
+			input:         &types.Type{Package: "k8s.io/api/core/v1", Name: "IPFamily"},
+			expectedLink:  "https://pkg.go.dev/k8s.io/api/core/v1#IPFamily",
+			expectedLocal: false,
+		},
+		{
+			name:          "knownType under k8s.io/apimachinery overrides auto kube link",
+			input:         &types.Type{Package: "k8s.io/apimachinery/pkg/apis/meta/v1", Name: "ObjectMeta"},
+			expectedLink:  "https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta",
+			expectedLocal: false,
+		},
+		{
+			name:          "kube type without knownType override gets auto link",
+			input:         &types.Type{Package: "k8s.io/api/core/v1", Name: "PodSpec"},
+			expectedLink:  "https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#podspec-v1-core",
+			expectedLocal: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			link, local := funcs.LinkForType(tc.input)
+			require.Equal(t, tc.expectedLink, link)
+			require.Equal(t, tc.expectedLocal, local)
+		})
+	}
+}
+
 func TestKubernetesHelper(t *testing.T) {
 	conf := config.Config{
 		Render: config.RenderConfig{
